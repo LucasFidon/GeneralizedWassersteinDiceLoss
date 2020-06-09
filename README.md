@@ -26,8 +26,8 @@ dist_mat = np.array([
 ])
 wass_loss = GeneralizedWassersteinDiceLoss(dist_matrix=dist_mat)
 
-pred = torch.tensor([[1, 0, 0], [0, 1, 0], [1, 0, 0]], dtype=torch.float32)
-grnd = torch.tensor([0, 1, 2], dtype=torch.int64)
+pred = torch.tensor([[1, 0, 0], [0, 1, 0], [1, 0, 0]], dtype=torch.float32).cuda()
+grnd = torch.tensor([0, 1, 2], dtype=torch.int64).cuda()
 wass_loss(pred, grnd)
 ```
 
