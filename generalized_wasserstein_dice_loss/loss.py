@@ -40,6 +40,9 @@ class GeneralizedWassersteinDiceLoss(_Loss):
 
     def forward(self, input, target):
         epsilon = np.spacing(1)  # smallest number available
+        # Convert the target segmentation to long if needed
+        if not(target.type() in [torch.LongTensor, torch.cuda.LongTensor]):
+            target = target.long()
         # Aggregate spatial dimensions
         flat_input = input.view(input.size(0), input.size(1), -1)  # b,c,s
         flat_target = target.view(target.size(0), -1)  # b,s

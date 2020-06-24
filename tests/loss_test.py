@@ -10,8 +10,8 @@ from generalized_wasserstein_dice_loss.loss import GeneralizedWassersteinDiceLos
 class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
     def test_bin_seg_2d(self):
         M = np.array(
-            [[0,1],
-             [1,0]]
+            [[0.,1.],
+             [1.,0.]]
         )
         # define 2d examples
         target = torch.tensor(
@@ -46,11 +46,59 @@ class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
         loss_poor = float(loss.forward(pred_very_poor, target).cpu())
         self.assertAlmostEqual(loss_poor, 1., places=3)
 
+    def test_different_target_data_type(self):
+        """
+        Test if the loss is compatible with all the integer types
+        for the target segmentation.
+        """
+        M = np.array(
+            [[0.,1.],
+             [1.,0.]]
+        )
+        # define 2d examples
+        target = torch.tensor(
+            [[0,0,0,0],
+             [0,1,1,0],
+             [0,1,1,0],
+             [0,0,0,0]]
+        )
+
+        if torch.cuda.is_available():
+            target = target.cuda()
+
+        # add another dimension corresponding to the batch (batch size = 1 here)
+        target = target.unsqueeze(0)  # shape (1, H, W)
+        pred_very_good = 1000 * F.one_hot(
+            target, num_classes=2).permute(0, 3, 1, 2).float()
+
+        target_uint8 = target.to(torch.uint8)
+        target_int8 = target.to(torch.int8)
+        target_short = target.short()
+        target_int = target.int()
+        target_long = target.long()
+        target_list = [
+            target_uint8,
+            target_int8,
+            target_short,
+            target_int,
+            target_long
+        ]
+
+        # initialize the loss
+        loss = GeneralizedWassersteinDiceLoss(dist_matrix=M)
+
+        # The test should work whatever integer type is used
+        for t in target_list:
+            # the loss for pred_very_good should be close to 0
+            loss_good = float(loss.forward(pred_very_good, t).cpu())
+            self.assertAlmostEqual(loss_good, 0., places=3)
+
+
     def test_empty_class_2d(self):
         num_classes = 2
         M = np.array(
-            [[0,1],
-             [1,0]]
+            [[0.,1.],
+             [1.,0.]]
         )
         # define 2d examples
         target = torch.tensor(
@@ -82,8 +130,8 @@ class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
 
     def test_bin_seg_3d(self):
         M = np.array(
-            [[0,1],
-             [1,0]]
+            [[0.,1.],
+             [1.,0.]]
         )
         # define 3d examples
         target = torch.tensor(
@@ -134,8 +182,8 @@ class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
         We verify that the loss is decreasing in almost all SGD steps.
         """
         M = np.array(
-            [[0,1],
-             [1,0]]
+            [[0.,1.],
+             [1.,0.]]
         )
         learning_rate = 0.01
         max_iter = 50
