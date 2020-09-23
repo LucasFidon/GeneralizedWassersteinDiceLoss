@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import unittest
-from generalized_wasserstein_dice_loss.loss import GeneralizedWassersteinDiceLoss
+from generalized_wasserstein_dice_loss.loss import GeneralizedWassersteinDiceLoss, SUPPORTED_WEIGHTING
 
 
 class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
@@ -30,21 +30,23 @@ class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
         pred_very_poor = 1000 * F.one_hot(
             1 - target, num_classes=2).permute(0, 3, 1, 2).float()
 
-        # initialize the loss
-        loss = GeneralizedWassersteinDiceLoss(dist_matrix=M)
+        for w_mode in SUPPORTED_WEIGHTING:
+            # initialize the loss
+            loss = GeneralizedWassersteinDiceLoss(
+                dist_matrix=M, weighting_mode=w_mode)
 
-        # the loss for pred_very_good should be close to 0
-        loss_good = float(loss.forward(pred_very_good, target).cpu())
-        self.assertAlmostEqual(loss_good, 0., places=3)
+            # the loss for pred_very_good should be close to 0
+            loss_good = float(loss.forward(pred_very_good, target).cpu())
+            self.assertAlmostEqual(loss_good, 0., places=3)
 
-        # same test, but with target with a class dimension
-        target_4dim = target.unsqueeze(1)  # shape (1, 1, H, W)
-        loss_good = float(loss.forward(pred_very_good, target_4dim).cpu())
-        self.assertAlmostEqual(loss_good, 0., places=3)
+            # same test, but with target with a class dimension
+            target_4dim = target.unsqueeze(1)  # shape (1, 1, H, W)
+            loss_good = float(loss.forward(pred_very_good, target_4dim).cpu())
+            self.assertAlmostEqual(loss_good, 0., places=3)
 
-        # the loss for pred_very_poor should be close to 1
-        loss_poor = float(loss.forward(pred_very_poor, target).cpu())
-        self.assertAlmostEqual(loss_poor, 1., places=3)
+            # the loss for pred_very_poor should be close to 1
+            loss_poor = float(loss.forward(pred_very_poor, target).cpu())
+            self.assertAlmostEqual(loss_poor, 1., places=3)
 
     def test_different_target_data_type(self):
         """
@@ -84,14 +86,16 @@ class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
             target_long
         ]
 
-        # initialize the loss
-        loss = GeneralizedWassersteinDiceLoss(dist_matrix=M)
+        for w_mode in SUPPORTED_WEIGHTING:
+            # initialize the loss
+            loss = GeneralizedWassersteinDiceLoss(
+                dist_matrix=M, weighting_mode=w_mode)
 
-        # The test should work whatever integer type is used
-        for t in target_list:
-            # the loss for pred_very_good should be close to 0
-            loss_good = float(loss.forward(pred_very_good, t).cpu())
-            self.assertAlmostEqual(loss_good, 0., places=3)
+            # The test should work whatever integer type is used
+            for t in target_list:
+                # the loss for pred_very_good should be close to 0
+                loss_good = float(loss.forward(pred_very_good, t).cpu())
+                self.assertAlmostEqual(loss_good, 0., places=3)
 
 
     def test_empty_class_2d(self):
@@ -117,16 +121,18 @@ class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
         pred_very_poor = 1000 * F.one_hot(
             1 - target, num_classes=num_classes).permute(0, 3, 1, 2).float()
 
-        # initialize the loss
-        loss = GeneralizedWassersteinDiceLoss(dist_matrix=M)
+        for w_mode in SUPPORTED_WEIGHTING:
+            # initialize the loss
+            loss = GeneralizedWassersteinDiceLoss(
+                dist_matrix=M, weighting_mode=w_mode)
 
-        # loss for pred_very_good should be close to 0
-        loss_good = float(loss.forward(pred_very_good, target).cpu())
-        self.assertAlmostEqual(loss_good, 0., places=3)
+            # loss for pred_very_good should be close to 0
+            loss_good = float(loss.forward(pred_very_good, target).cpu())
+            self.assertAlmostEqual(loss_good, 0., places=3)
 
-        # loss for pred_very_poor should be close to 1
-        loss_poor = float(loss.forward(pred_very_poor, target).cpu())
-        self.assertAlmostEqual(loss_poor, 1., places=3)
+            # loss for pred_very_poor should be close to 1
+            loss_poor = float(loss.forward(pred_very_poor, target).cpu())
+            self.assertAlmostEqual(loss_poor, 1., places=3)
 
     def test_bin_seg_3d(self):
         M = np.array(
@@ -163,16 +169,18 @@ class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
         pred_very_poor = 1000 * F.one_hot(
             1 - target, num_classes=2).permute(0, 4, 1, 2, 3).float()
 
-        # initialize the loss
-        loss = GeneralizedWassersteinDiceLoss(dist_matrix=M)
+        for w_mode in SUPPORTED_WEIGHTING:
+            # initialize the loss
+            loss = GeneralizedWassersteinDiceLoss(
+                dist_matrix=M, weighting_mode=w_mode)
 
-        # mean dice loss for pred_very_good should be close to 0
-        loss_good = float(loss.forward(pred_very_good, target).cpu())
-        self.assertAlmostEqual(loss_good, 0., places=3)
+            # mean dice loss for pred_very_good should be close to 0
+            loss_good = float(loss.forward(pred_very_good, target).cpu())
+            self.assertAlmostEqual(loss_good, 0., places=3)
 
-        # mean dice loss for pred_very_poor should be close to 1
-        loss_poor = float(loss.forward(pred_very_poor, target).cpu())
-        self.assertAlmostEqual(loss_poor, 1., places=3)
+            # mean dice loss for pred_very_poor should be close to 1
+            loss_poor = float(loss.forward(pred_very_poor, target).cpu())
+            self.assertAlmostEqual(loss_poor, 1., places=3)
 
     def test_convergence(self):
         """
@@ -226,54 +234,58 @@ class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
                 x = x.view(-1, num_classes, 3, 4, 4)
                 return x
 
-        # initialise the network
-        net = OnelayerNet()
-        if torch.cuda.is_available():
-            net = net.cuda()
 
-        # initialize the loss
-        loss = GeneralizedWassersteinDiceLoss(dist_matrix=M)
+        for w_mode in SUPPORTED_WEIGHTING:
+            # initialise the network
+            net = OnelayerNet()
+            if torch.cuda.is_available():
+                net = net.cuda()
 
-        # initialize an SGD
-        optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9)
+            # initialize the loss
+            loss = GeneralizedWassersteinDiceLoss(
+                dist_matrix=M, weighting_mode=w_mode)
 
-        # initial difference between pred and target
-        pred_start = torch.argmax(net(image), dim=1)
-        diff_start = torch.norm(pred_start.float() - target_seg.float())
+            # initialize an SGD
+            optimizer = optim.SGD(
+                net.parameters(), lr=learning_rate, momentum=0.9)
 
-        loss_history = []
-        # train the network
-        for _ in range(max_iter):
-            # set the gradient to zero
-            optimizer.zero_grad()
+            # initial difference between pred and target
+            pred_start = torch.argmax(net(image), dim=1)
+            diff_start = torch.norm(pred_start.float() - target_seg.float())
 
-            # forward pass
-            output = net(image)
-            loss_val = loss(output, target_seg)
+            loss_history = []
+            # train the network
+            for _ in range(max_iter):
+                # set the gradient to zero
+                optimizer.zero_grad()
 
-            # backward pass
-            loss_val.backward()
-            optimizer.step()
+                # forward pass
+                output = net(image)
+                loss_val = loss(output, target_seg)
 
-            # stats
-            loss_history.append(loss_val.item())
+                # backward pass
+                loss_val.backward()
+                optimizer.step()
 
-        # difference between pred and target after training
-        pred_end = torch.argmax(net(image), dim=1)
-        diff_end = torch.norm(pred_end.float() - target_seg.float())
+                # stats
+                loss_history.append(loss_val.item())
 
-        # count the number of SGD steps in which the loss decreases
-        num_decreasing_steps = 0
-        for i in range(len(loss_history) - 1):
-            if loss_history[i] > loss_history[i+1]:
-                num_decreasing_steps += 1
-        decreasing_steps_ratio = float(num_decreasing_steps) / (len(loss_history) - 1)
+            # difference between pred and target after training
+            pred_end = torch.argmax(net(image), dim=1)
+            diff_end = torch.norm(pred_end.float() - target_seg.float())
 
-        # verify that the loss is decreasing for sufficiently many SGD steps
-        self.assertTrue(decreasing_steps_ratio > 0.9)
+            # count the number of SGD steps in which the loss decreases
+            num_decreasing_steps = 0
+            for i in range(len(loss_history) - 1):
+                if loss_history[i] > loss_history[i+1]:
+                    num_decreasing_steps += 1
+            decreasing_steps_ratio = float(num_decreasing_steps) / (len(loss_history) - 1)
 
-        # check that the predicted segmentation has improved
-        self.assertGreater(diff_start, diff_end)
+            # verify that the loss is decreasing for sufficiently many SGD steps
+            self.assertTrue(decreasing_steps_ratio > 0.9)
+
+            # check that the predicted segmentation has improved
+            self.assertGreater(diff_start, diff_end)
 
 
 if __name__ == '__main__':
