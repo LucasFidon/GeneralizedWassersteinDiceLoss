@@ -53,19 +53,20 @@ class GeneralizedWassersteinDiceLoss(_Loss):
         """
         super(GeneralizedWassersteinDiceLoss, self).__init__(
             reduction=reduction)
+
+        assert weighting_mode in SUPPORTED_WEIGHTING, \
+            "weighting_mode must be in %s" % str(SUPPORTED_WEIGHTING)
+
         self.M = dist_matrix
         if isinstance(self.M, np.ndarray):
             self.M = torch.from_numpy(self.M)
-        if torch.cuda.is_available():
-            self.M = self.M.cuda()
         if torch.max(self.M) != 1:
             print('Normalize the maximum of the distance matrix '
                   'used in the Generalized Wasserstein Dice Loss to 1.')
             self.M = self.M / torch.max(self.M)
+
         self.num_classes = self.M.size(0)
         self.alpha_mode = weighting_mode
-        assert weighting_mode in SUPPORTED_WEIGHTING, \
-            "weighting_mode must be in %s" % str(SUPPORTED_WEIGHTING)
         self.reduction = reduction
 
     def forward(self, input, target):
@@ -81,15 +82,20 @@ class GeneralizedWassersteinDiceLoss(_Loss):
         :return: scalar tensor. Loss function value.
         """
         epsilon = np.spacing(1)  # smallest number available
+
         # Convert the target segmentation to long if needed
         target = target.long()
+
         # Aggregate spatial dimensions
         flat_input = input.view(input.size(0), input.size(1), -1)  # b,c,s
         flat_target = target.view(target.size(0), -1)  # b,s
+
         # Apply the softmax to the input scores map
         probs = F.softmax(flat_input, dim=1)  # b,c,s
+
         # Compute the Wasserstein distance map
         wass_dist_map = self.wasserstein_distance_map(probs, flat_target)
+
         # Compute the generalised number of true positives
         alpha = self.compute_alpha_generalized_true_positives(flat_target)
 
@@ -130,7 +136,8 @@ class GeneralizedWassersteinDiceLoss(_Loss):
         Fidon L. et al. MICCAI BrainLes 2017
         """
         # Turn the distance matrix to a map of identical matrix
-        M_extended = torch.unsqueeze(self.M, dim=0)  # C,C -> 1,C,C
+        M_extended = torch.clone(self.M).to(flat_proba.device)
+        M_extended = torch.unsqueeze(M_extended, dim=0)  # C,C -> 1,C,C
         M_extended = torch.unsqueeze(M_extended, dim=3)  # 1,C,C -> 1,C,C,1
         M_extended = M_extended.expand((
             flat_proba.size(0),
@@ -138,17 +145,21 @@ class GeneralizedWassersteinDiceLoss(_Loss):
             M_extended.size(2),
             flat_proba.size(2)
         ))
+
         # Expand the feature dimensions of the target
         flat_target_extended = torch.unsqueeze(flat_target, dim=1)  # b,s -> b,1,s
         flat_target_extended = flat_target_extended.expand(  # b,1,s -> b,C,s
             (flat_target.size(0), M_extended.size(1), flat_target.size(1))
         )
         flat_target_extended = torch.unsqueeze(flat_target_extended, dim=1)  # b,C,s -> b,1,C,s
+
         # Extract the vector of class distances for the ground-truth label at each voxel
         M_extended = torch.gather(M_extended, dim=1, index=flat_target_extended)  # b,C,C,s -> b,1,C,s
         M_extended = torch.squeeze(M_extended, dim=1)  # b,1,C,s -> b,C,s
+
         # Compute the wasserstein distance map
         wasserstein_map = M_extended * flat_proba
+
         # Sum over the classes
         wasserstein_map = torch.sum(wasserstein_map, dim=1)  # b,C,s -> b,s
         return wasserstein_map
@@ -179,6 +190,7 @@ class GeneralizedWassersteinDiceLoss(_Loss):
         flat_target_extended = torch.unsqueeze(flat_target, dim=1)  # b,s -> b,1,s
         alpha_extended = torch.gather(
             alpha_extended, index=flat_target_extended, dim=1)  # b,C,s -> b,1,s
+
         # Compute the generalized true positive as in eq. 9
         generalized_true_pos = torch.sum(
             alpha_extended * (2. - wasserstein_distance_map),
@@ -188,7 +200,7 @@ class GeneralizedWassersteinDiceLoss(_Loss):
 
     def compute_alpha_generalized_true_positives(self, flat_target):
         """
-        Compute the weights \alpha_l of eq. 9 in [1].
+        Compute the weights alpha_l of eq. 9 in [1].
 
         References:
         ===========
