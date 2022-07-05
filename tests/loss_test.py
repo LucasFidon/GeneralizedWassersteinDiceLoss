@@ -7,7 +7,134 @@ import unittest
 from generalized_wasserstein_dice_loss.loss import GeneralizedWassersteinDiceLoss, SUPPORTED_WEIGHTING
 
 
+def dice_loss_binary(input, target):
+    assert input.size(1) == 2, "Dice loss only for binary segmentation"
+
+    epsilon = np.spacing(1)  # smallest number available
+
+    # Convert the target segmentation to long if needed
+    target = target.long()
+
+    # Aggregate spatial dimensions
+    flat_input = input.view(input.size(0), input.size(1), -1)  # b,2,s
+    flat_target = target.view(target.size(0), -1)  # b,s
+
+    # Apply the softmax to the input scores map
+    probs = F.softmax(flat_input, dim=1)  # b,2,s
+    probs_fg = probs[:, 1, :]  # b,s
+
+    num = epsilon + 2. * torch.sum(flat_target * probs_fg, dim=1)
+    denom = epsilon + torch.sum(flat_target + probs_fg, dim=1)
+
+    dice = 1 - num / denom
+    mean_dice = dice.mean()
+
+    return mean_dice
+
+
 class TestGeneralizedWassersteinDiceLoss(unittest.TestCase):
+
+    def test_wasserstein_special_case_binary(self):
+        """
+        In the binary case and when M =[[0,1], [1,0]],
+        the wasserstein distance is equal to the absolute difference
+        between predicted proba for the foreground and ground truth proba for the foreground.
+        """
+        M = np.array(
+            [[0.,1.],
+             [1.,0.]]
+        )
+
+        n_class = 2  # it has to be 2: binary segmentation problem
+        bs = 3  # batch size
+        s = 16  # number of elements
+
+        # random binary ground-truth segmentation
+        target = torch.randint(low=0, high=2, size=(bs, s))
+        # random proba
+        pred_proba = F.softmax(12. * torch.rand(bs, n_class, s).float(), dim=1)
+        if torch.cuda.is_available():
+            target = target.cuda()
+            pred_proba = pred_proba.cuda()
+
+        gwdl = GeneralizedWassersteinDiceLoss(
+            dist_matrix=M, weighting_mode='default')
+
+        wass = gwdl.wasserstein_distance_map(pred_proba, target)
+        diff_fg = torch.abs(pred_proba[:, 1, :] - target)
+
+        res = float(torch.sum(torch.abs(wass - diff_fg)).cpu())
+
+        self.assertAlmostEqual(res, 0., places=5)
+
+    def test_generalized_true_positive_special_case_binary(self):
+        """
+        In the binary case and when M =[[0,1], [1,0]],
+        the generalized true positive reduces to the normal true positives,
+        i.e. the sum over all elements of the ground truth and predicted proba for the foreground.
+        """
+        M = np.array(
+            [[0.,1.],
+             [1.,0.]]
+        )
+
+        n_class = 2  # it has to be 2: binary segmentation problem
+        bs = 5  # batch size
+        s = 16  # number of elements
+
+        # random binary ground-truth segmentation
+        target = torch.randint(low=0, high=2, size=(bs, s))
+        # random proba
+        pred_proba = F.softmax(12. * torch.rand(bs, n_class, s).float(), dim=1)
+        if torch.cuda.is_available():
+            target = target.cuda()
+            pred_proba = pred_proba.cuda()
+
+        gwdl = GeneralizedWassersteinDiceLoss(
+            dist_matrix=M, weighting_mode='default')
+
+        alpha = gwdl.compute_alpha_generalized_true_positives(target)
+        wass = gwdl.wasserstein_distance_map(pred_proba, target)
+        gen_true_pos = gwdl.compute_generalized_true_positive(alpha, target, wass)
+        true_pos = torch.sum(pred_proba[:, 1, :] * target, dim=1)
+
+        res = float(torch.sum(torch.abs(gen_true_pos - true_pos)).cpu())
+
+        self.assertAlmostEqual(res, 0., places=5)
+
+    def test_dice_loss_as_special_case_binary_2d(self):
+        """
+        In the binary case and when M =[[0,1], [1,0]],
+        the generalized Wasserstein Dice loss reduces to the Dice loss
+        (see section 2.5 in the paper)
+        """
+        M = np.array(
+            [[0.,1.],
+             [1.,0.]]
+        )
+
+        n_class = 2  # it has to be 2: binary segmentation problem
+        bs = 3  # batch size
+        nx = 4
+        ny = 4
+
+        # random binary ground-truth segmentation
+        target = torch.randint(low=0, high=2, size=(bs, nx, ny))
+        # pre-softmax random score
+        pred_score = 12. * torch.rand(bs, n_class, nx, ny).float()
+        if torch.cuda.is_available():
+            target = target.cuda()
+            pred_score = pred_score.cuda()
+
+        gwdl = GeneralizedWassersteinDiceLoss(
+            dist_matrix=M, weighting_mode='default')
+
+        gwdl_val = float(gwdl(pred_score, target).cpu())
+        dice_val = float(dice_loss_binary(pred_score, target).cpu())
+
+        self.assertAlmostEqual(gwdl_val - dice_val, 0., places=5)
+
+
     def test_bin_seg_2d(self):
         M = np.array(
             [[0.,1.],
