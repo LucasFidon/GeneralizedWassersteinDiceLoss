@@ -105,7 +105,7 @@ class GeneralizedWassersteinDiceLoss(_Loss):
             # contrary to [1] we also use alpha in the "generalized all error".
             true_pos = self.compute_generalized_true_positive(
                 alpha, flat_target, wass_dist_map)
-            denom = self.compute_denominator(alpha, flat_target, wass_dist_map)
+            denom = self.compute_denominator_GDL(alpha, flat_target, wass_dist_map)
         else:  # default: as in [1]
             # (i.e. alpha=1 for all foreground classes and 0 for the background).
             # Compute the generalised number of true positives
@@ -173,15 +173,20 @@ class GeneralizedWassersteinDiceLoss(_Loss):
         flat_target_extended = torch.unsqueeze(flat_target, dim=1)  # b,s -> b,1,s
         alpha_extended = torch.gather(
             alpha_extended, index=flat_target_extended, dim=1)  # b,C,s -> b,1,s
+        alpha_extended = torch.squeeze(alpha_extended, dim=1) # b,1,s -> b,s
 
         # Compute the generalized true positive as in eq. 9 of [1]
+        # The value in the parenthesis is 1 because the distance from a foreground class
+        # to the background is always equal to 1 (see __init__ function)
+        # and because the value of alpha for the background class is 0
         generalized_true_pos = torch.sum(
             alpha_extended * (1. - wasserstein_distance_map),
-            dim=[1, 2],
+            dim=1,
         )
+
         return generalized_true_pos
 
-    def compute_denominator(self, alpha, flat_target, wasserstein_distance_map):
+    def compute_denominator_GDL(self, alpha, flat_target, wasserstein_distance_map):
         # Extend alpha to a map and select value at each voxel according to flat_target
         alpha_extended = torch.unsqueeze(alpha, dim=2)  # b,C -> b,C,1
         alpha_extended = alpha_extended.expand(  # b,C,1 -> b,C,s
@@ -190,12 +195,13 @@ class GeneralizedWassersteinDiceLoss(_Loss):
         flat_target_extended = torch.unsqueeze(flat_target, dim=1)  # b,s -> b,1,s
         alpha_extended = torch.gather(
             alpha_extended, index=flat_target_extended, dim=1)  # b,C,s -> b,1,s
+        alpha_extended = torch.squeeze(alpha_extended, dim=1) # b,1,s -> b,s
 
-        # Compute the generalized true positive as in eq. 9
         generalized_true_pos = torch.sum(
             alpha_extended * (2. - wasserstein_distance_map),
-            dim=[1, 2],
+            dim=1,
         )
+
         return generalized_true_pos
 
     def compute_alpha_generalized_true_positives(self, flat_target):
